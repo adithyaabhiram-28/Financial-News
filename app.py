@@ -106,9 +106,10 @@ df = None
 
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
+
 else:
     try:
-        # Default dataset
+        # Load Kaggle Financial News dataset
         df = pd.read_csv("all-data.csv", header=None, encoding="latin1")
         df.columns = ["sentiment", "text"]
         st.sidebar.success("Loaded default dataset: all-data.csv")
@@ -117,32 +118,56 @@ else:
 
 if df is not None:
 
-    st.subheader("📂 Dataset Preview")
-    st.dataframe(df.head())
-
-    # Detect text column automatically
-    text_col = None
-    for col in df.columns:
-        if df[col].dtype == "object":
-            text_col = col
-            break
-
-    texts = df[text_col].astype(str)
-
     # -------------------------------------------------------
-    # Vectorization
+    # Select Text Column (SAFE VERSION)
     # -------------------------------------------------------
-    ngram_range = get_ngram_range(ngram_option)
+    if "text" in df.columns:
+        text_col = "text"
+    else:
+        # fallback auto-detect longest text column
+        text_lengths = df.select_dtypes(include="object").apply(
+            lambda x: x.astype(str).str.len().mean()
+        )
+        text_col = text_lengths.idxmax()
 
+    # Clean text safely
+    texts = (
+        df[text_col]
+        .astype(str)
+        .replace("nan", "")
+        .str.strip()
+    )
+
+    texts = texts[texts != ""]
+
+    if len(texts) == 0:
+        st.error("No valid text found after cleaning.")
+        st.stop()
+
+    df = df.loc[texts.index].reset_index(drop=True)
+    
+  # -------------------------------------------------------
+# Vectorization
+# -------------------------------------------------------
+ngram_range = get_ngram_range(ngram_option)
+
+try:
     vectorizer = TfidfVectorizer(
         max_features=max_features,
         stop_words="english" if use_stopwords else None,
-        ngram_range=ngram_range
+        ngram_range=ngram_range,
+        min_df=2  # prevents empty vocab errors
     )
 
     X = vectorizer.fit_transform(texts)
 
-    st.write("TF-IDF Shape:", X.shape)
+    if X.shape[1] == 0:
+        st.error("Vocabulary is empty. Try disabling stopwords or increasing features.")
+        st.stop()
+
+except ValueError:
+    st.error("TF-IDF failed. Try turning OFF stopwords or increasing dataset size.")
+    st.stop()
 
     # -------------------------------------------------------
     # Generate Dendrogram Button
