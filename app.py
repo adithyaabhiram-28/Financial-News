@@ -1,6 +1,7 @@
-# app.py
+# -------------------------------------------------------
 # 🟣 News Topic Discovery Dashboard
-# Using Hierarchical Clustering
+# Hierarchical Clustering – AUTO VERSION
+# -------------------------------------------------------
 
 import streamlit as st
 import pandas as pd
@@ -14,14 +15,10 @@ from sklearn.decomposition import PCA
 
 from scipy.cluster.hierarchy import dendrogram, linkage
 
-
 # -------------------------------------------------------
 # Page Config
 # -------------------------------------------------------
-st.set_page_config(
-    page_title="News Topic Discovery Dashboard",
-    layout="wide"
-)
+st.set_page_config(page_title="News Topic Discovery Dashboard", layout="wide")
 
 st.title("🟣 News Topic Discovery Dashboard")
 st.markdown(
@@ -29,14 +26,9 @@ st.markdown(
 )
 
 # -------------------------------------------------------
-# Sidebar – Inputs
+# Sidebar Controls
 # -------------------------------------------------------
 st.sidebar.header("⚙️ Controls")
-
-uploaded_file = st.sidebar.file_uploader(
-    "Upload CSV Dataset (Optional)",
-    type=["csv"]
-)
 
 max_features = st.sidebar.slider(
     "Maximum TF-IDF Features",
@@ -68,6 +60,10 @@ dendro_size = st.sidebar.slider(
     20, 200, 100
 )
 
+n_clusters = st.sidebar.slider(
+    "Number of Clusters",
+    2, 10, 3
+)
 
 # -------------------------------------------------------
 # Helper Functions
@@ -83,7 +79,7 @@ def get_ngram_range(option):
 
 def extract_top_terms_per_cluster(X, labels, vectorizer, top_n=10):
     terms = vectorizer.get_feature_names_out()
-    df_terms = []
+    output = []
 
     for c in sorted(np.unique(labels)):
         idx = np.where(labels == c)[0]
@@ -94,61 +90,32 @@ def extract_top_terms_per_cluster(X, labels, vectorizer, top_n=10):
         top_indices = np.argsort(cluster_mean)[::-1][:top_n]
         keywords = ", ".join([terms[i] for i in top_indices])
 
-        df_terms.append((c, keywords))
+        output.append((c, keywords))
 
-    return df_terms
+    return output
 
 
 # -------------------------------------------------------
-# Load Dataset
+# Load Dataset (AUTO)
 # -------------------------------------------------------
-df = None
+try:
+    df = pd.read_csv("all-data.csv", header=None, encoding="latin1")
+    df.columns = ["sentiment", "text"]
+    st.sidebar.success("Loaded dataset: all-data.csv")
+except:
+    st.error("all-data.csv not found in project folder.")
+    st.stop()
 
-if uploaded_file is not None:
-    df = pd.read_csv(uploaded_file)
+# Clean text safely
+texts = df["text"].astype(str).replace("nan", "").str.strip()
+texts = texts[texts != ""]
+df = df.loc[texts.index].reset_index(drop=True)
 
-else:
-    try:
-        # Load Kaggle Financial News dataset
-        df = pd.read_csv("all-data.csv", header=None, encoding="latin1")
-        df.columns = ["sentiment", "text"]
-        st.sidebar.success("Loaded default dataset: all-data.csv")
-    except:
-        st.warning("Upload a dataset or place all-data.csv beside app.py")
-
-if df is not None:
-
-    # -------------------------------------------------------
-    # Select Text Column (SAFE VERSION)
-    # -------------------------------------------------------
-    if "text" in df.columns:
-        text_col = "text"
-    else:
-        # fallback auto-detect longest text column
-        text_lengths = df.select_dtypes(include="object").apply(
-            lambda x: x.astype(str).str.len().mean()
-        )
-        text_col = text_lengths.idxmax()
-
-    # Clean text safely
-    texts = (
-        df[text_col]
-        .astype(str)
-        .replace("nan", "")
-        .str.strip()
-    )
-
-    texts = texts[texts != ""]
-
-    if len(texts) == 0:
-        st.error("No valid text found after cleaning.")
-        st.stop()
-
-    df = df.loc[texts.index].reset_index(drop=True)
-    
-  # -------------------------------------------------------
+# -------------------------------------------------------
 # Vectorization
 # -------------------------------------------------------
+st.subheader("📊 TF-IDF Vectorization")
+
 ngram_range = get_ngram_range(ngram_option)
 
 try:
@@ -156,149 +123,132 @@ try:
         max_features=max_features,
         stop_words="english" if use_stopwords else None,
         ngram_range=ngram_range,
-        min_df=2  # prevents empty vocab errors
+        min_df=2
     )
 
     X = vectorizer.fit_transform(texts)
 
     if X.shape[1] == 0:
-        st.error("Vocabulary is empty. Try disabling stopwords or increasing features.")
+        st.error("Vocabulary is empty. Disable stopwords or change n-grams.")
         st.stop()
 
-except ValueError:
-    st.error("TF-IDF failed. Try turning OFF stopwords or increasing dataset size.")
+except:
+    st.error("TF-IDF failed. Try different settings.")
     st.stop()
 
-    # -------------------------------------------------------
-    # Generate Dendrogram Button
-    # -------------------------------------------------------
-    if "Z" not in st.session_state:
-        st.session_state.Z = None
+st.write("TF-IDF Shape:", X.shape)
 
-    if st.button("🟦 Generate Dendrogram"):
+# -------------------------------------------------------
+# 🌳 Dendrogram
+# -------------------------------------------------------
+st.subheader("🌳 Dendrogram")
 
-        subset_size = min(dendro_size, X.shape[0])
-        X_subset = X[:subset_size].toarray()
+subset_size = min(dendro_size, X.shape[0])
+X_subset = X[:subset_size].toarray()
 
-        Z = linkage(X_subset, method=linkage_method)
-        st.session_state.Z = Z
+Z = linkage(X_subset, method=linkage_method)
 
-    # -------------------------------------------------------
-    # Dendrogram Section
-    # -------------------------------------------------------
-    if st.session_state.Z is not None:
-        st.subheader("🌳 Dendrogram")
+fig = plt.figure(figsize=(12,5))
+dendrogram(Z)
+plt.xlabel("Article Index")
+plt.ylabel("Distance")
+st.pyplot(fig)
 
-        fig = plt.figure(figsize=(12, 5))
-        dendrogram(st.session_state.Z)
-        plt.title("Dendrogram of News Articles")
-        plt.xlabel("Article Index")
-        plt.ylabel("Distance")
-        st.pyplot(fig)
+st.info(
+    "Large vertical gaps suggest natural topic separation."
+)
 
-        st.info(
-            "Large vertical gaps indicate natural separation between groups."
-        )
+# -------------------------------------------------------
+# 🟩 Agglomerative Clustering
+# -------------------------------------------------------
+st.subheader("🟩 Clustering Output")
 
-    # -------------------------------------------------------
-    # Apply Clustering
-    # -------------------------------------------------------
-    st.subheader("🟩 Apply Clustering")
+model = AgglomerativeClustering(
+    n_clusters=n_clusters,
+    linkage=linkage_method,
+    metric=distance_metric
+)
 
-    n_clusters = st.number_input(
-        "Number of Clusters",
-        min_value=2,
-        max_value=10,
-        value=3
+labels = model.fit_predict(X.toarray())
+df["Cluster"] = labels
+
+# -------------------------------------------------------
+# PCA Visualization
+# -------------------------------------------------------
+st.subheader("📌 PCA Cluster Visualization")
+
+pca = PCA(n_components=2)
+X_pca = pca.fit_transform(X.toarray())
+
+fig2 = plt.figure(figsize=(8,6))
+plt.scatter(X_pca[:,0], X_pca[:,1], c=labels)
+plt.title("Cluster Projection")
+st.pyplot(fig2)
+
+# -------------------------------------------------------
+# Cluster Summary Table
+# -------------------------------------------------------
+st.subheader("📋 Cluster Summary")
+
+top_terms = extract_top_terms_per_cluster(
+    X.toarray(),
+    labels,
+    vectorizer,
+    top_n=10
+)
+
+summary_data = []
+
+for c, keywords in top_terms:
+    count = np.sum(labels == c)
+    sample_text = texts[labels == c].iloc[0][:120]
+    summary_data.append([c, count, keywords, sample_text])
+
+summary_df = pd.DataFrame(
+    summary_data,
+    columns=[
+        "Cluster ID",
+        "Number of Articles",
+        "Top Keywords",
+        "Sample Article"
+    ]
+)
+
+st.dataframe(summary_df)
+
+# -------------------------------------------------------
+# Validation Section
+# -------------------------------------------------------
+st.subheader("📊 Validation")
+
+score = silhouette_score(X, labels)
+st.metric("Silhouette Score", round(score, 4))
+
+if score > 0.5:
+    st.success("Clusters are clearly separated.")
+elif score > 0:
+    st.warning("Clusters have some overlap.")
+else:
+    st.error("Clusters may not be meaningful.")
+
+# -------------------------------------------------------
+# Editorial Insights
+# -------------------------------------------------------
+st.subheader("🧠 Editorial Insights")
+
+for row in summary_data:
+    cid = row[0]
+    keywords = row[2].split(",")[:3]
+    st.write(
+        f"🟣 Cluster {cid}: Articles appear to focus on topics related to "
+        f"{', '.join(keywords)}."
     )
 
-    if st.button("Apply Clustering"):
-
-        model = AgglomerativeClustering(
-            n_clusters=n_clusters,
-            linkage=linkage_method,
-            metric=distance_metric
-        )
-
-        labels = model.fit_predict(X.toarray())
-        df["Cluster"] = labels
-
-        # -------------------------------------------------------
-        # PCA Visualization
-        # -------------------------------------------------------
-        st.subheader("📊 Cluster Visualization (PCA Projection)")
-
-        pca = PCA(n_components=2)
-        X_pca = pca.fit_transform(X.toarray())
-
-        fig2 = plt.figure(figsize=(8, 6))
-        plt.scatter(X_pca[:, 0], X_pca[:, 1], c=labels)
-        plt.title("Cluster Scatter Plot")
-        st.pyplot(fig2)
-
-        # -------------------------------------------------------
-        # Cluster Summary
-        # -------------------------------------------------------
-        st.subheader("📋 Cluster Summary")
-
-        top_terms = extract_top_terms_per_cluster(
-            X.toarray(),
-            labels,
-            vectorizer,
-            top_n=10
-        )
-
-        summary_data = []
-
-        for c, keywords in top_terms:
-            count = np.sum(labels == c)
-            sample_text = texts[labels == c].iloc[0][:120]
-            summary_data.append([c, count, keywords, sample_text])
-
-        summary_df = pd.DataFrame(
-            summary_data,
-            columns=[
-                "Cluster ID",
-                "Number of Articles",
-                "Top Keywords",
-                "Sample Article"
-            ]
-        )
-
-        st.dataframe(summary_df)
-
-        # -------------------------------------------------------
-        # Silhouette Score
-        # -------------------------------------------------------
-        st.subheader("📊 Validation")
-
-        score = silhouette_score(X, labels)
-        st.metric("Silhouette Score", round(score, 4))
-
-        if score > 0.5:
-            st.success("Clusters are clearly separated.")
-        elif score > 0:
-            st.warning("Some overlap exists between clusters.")
-        else:
-            st.error("Clusters may not be meaningful.")
-
-        # -------------------------------------------------------
-        # Editorial Insights
-        # -------------------------------------------------------
-        st.subheader("🧠 Editorial Insights")
-
-        for row in summary_data:
-            cid = row[0]
-            keywords = row[2].split(",")[:3]
-            st.write(
-                f"🟣 Cluster {cid}: Articles appear to focus on topics related to "
-                f"{', '.join(keywords)}."
-            )
-
-        # -------------------------------------------------------
-        # Guidance Box
-        # -------------------------------------------------------
-        st.info(
-            "Articles grouped together share similar vocabulary and themes. "
-            "These groupings can support tagging, recommendations, and content organization."
-        )
+# -------------------------------------------------------
+# Guidance Box
+# -------------------------------------------------------
+st.info(
+    "Articles grouped together share similar vocabulary and themes. "
+    "These clusters can support automatic tagging, recommendations, "
+    "and content organization."
+)
