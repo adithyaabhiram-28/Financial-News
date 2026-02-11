@@ -34,7 +34,7 @@ st.markdown(
 st.sidebar.header("⚙️ Controls")
 
 uploaded_file = st.sidebar.file_uploader(
-    "Upload CSV Dataset",
+    "Upload CSV Dataset (Optional)",
     type=["csv"]
 )
 
@@ -67,6 +67,7 @@ dendro_size = st.sidebar.slider(
     "Number of Articles for Dendrogram",
     20, 200, 100
 )
+
 
 # -------------------------------------------------------
 # Helper Functions
@@ -101,22 +102,30 @@ def extract_top_terms_per_cluster(X, labels, vectorizer, top_n=10):
 # -------------------------------------------------------
 # Load Dataset
 # -------------------------------------------------------
+df = None
+
 if uploaded_file is not None:
     df = pd.read_csv(uploaded_file)
+else:
+    try:
+        # Default dataset
+        df = pd.read_csv("all-data.csv", header=None, encoding="latin1")
+        df.columns = ["sentiment", "text"]
+        st.sidebar.success("Loaded default dataset: all-data.csv")
+    except:
+        st.warning("Upload a dataset or place all-data.csv beside app.py")
+
+if df is not None:
 
     st.subheader("📂 Dataset Preview")
     st.dataframe(df.head())
 
-    # Automatically detect text column
+    # Detect text column automatically
     text_col = None
     for col in df.columns:
         if df[col].dtype == "object":
             text_col = col
             break
-
-    if text_col is None:
-        st.error("No text column detected.")
-        st.stop()
 
     texts = df[text_col].astype(str)
 
@@ -162,13 +171,6 @@ if uploaded_file is not None:
         plt.ylabel("Distance")
         st.pyplot(fig)
 
-        cut_height = st.slider(
-            "Optional Cut Height (visual aid)",
-            0.0,
-            float(np.max(st.session_state.Z[:, 2])),
-            float(np.max(st.session_state.Z[:, 2]) / 2)
-        )
-
         st.info(
             "Large vertical gaps indicate natural separation between groups."
         )
@@ -189,8 +191,7 @@ if uploaded_file is not None:
 
         model = AgglomerativeClustering(
             n_clusters=n_clusters,
-            linkage=link
-age_method,
+            linkage=linkage_method,
             metric=distance_metric
         )
 
@@ -257,7 +258,7 @@ age_method,
             st.error("Clusters may not be meaningful.")
 
         # -------------------------------------------------------
-        # Business Interpretation Section
+        # Editorial Insights
         # -------------------------------------------------------
         st.subheader("🧠 Editorial Insights")
 
@@ -276,6 +277,3 @@ age_method,
             "Articles grouped together share similar vocabulary and themes. "
             "These groupings can support tagging, recommendations, and content organization."
         )
-
-else:
-    st.warning("Please upload a CSV dataset to begin.")
