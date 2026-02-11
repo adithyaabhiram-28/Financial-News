@@ -28,8 +28,6 @@ st.markdown(
 # -------------------------------------------------------
 # Sidebar Controls
 # -------------------------------------------------------
-st.sidebar.header("⚙️ Controls")
-
 max_features = st.sidebar.slider(
     "Maximum TF-IDF Features",
     100, 2000, 1000
@@ -114,7 +112,7 @@ df = df.loc[texts.index].reset_index(drop=True)
 # -------------------------------------------------------
 # Vectorization
 # -------------------------------------------------------
-st.subheader("📊 TF-IDF Vectorization")
+st.subheader("TF-IDF Vectorization")
 
 ngram_range = get_ngram_range(ngram_option)
 
@@ -141,7 +139,7 @@ st.write("TF-IDF Shape:", X.shape)
 # -------------------------------------------------------
 # 🌳 Dendrogram
 # -------------------------------------------------------
-st.subheader("🌳 Dendrogram")
+st.subheader("Dendrogram")
 
 subset_size = min(dendro_size, X.shape[0])
 X_subset = X[:subset_size].toarray()
@@ -161,7 +159,7 @@ st.info(
 # -------------------------------------------------------
 # 🟩 Agglomerative Clustering
 # -------------------------------------------------------
-st.subheader("🟩 Clustering Output")
+st.subheader("Clustering Output")
 
 model = AgglomerativeClustering(
     n_clusters=n_clusters,
@@ -175,7 +173,7 @@ df["Cluster"] = labels
 # -------------------------------------------------------
 # PCA Visualization
 # -------------------------------------------------------
-st.subheader("📌 PCA Cluster Visualization")
+st.subheader("PCA Cluster Visualization")
 
 pca = PCA(n_components=2)
 X_pca = pca.fit_transform(X.toarray())
@@ -234,7 +232,7 @@ else:
 # -------------------------------------------------------
 # Editorial Insights
 # -------------------------------------------------------
-st.subheader("🧠 Editorial Insights")
+st.subheader("Editorial Insights")
 
 for row in summary_data:
     cid = row[0]
